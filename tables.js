@@ -1,7 +1,8 @@
 // Hakan Aytaş CodeBug yapımıdır - İletişim: hffhakan@gmail.com
 // tables.js
 // Masaların listelenmesi, masa açma/kapatma, adisyon (sipariş) ekleme-çıkarma,
-// kaydetme, ödeme alma, adisyon bastırma ve garson çağırma işlemleri.
+// kaydetme, ödeme alma, adisyon bastırma, garson çağırma ve QR'dan gelen
+// siparişlerin onaylanması işlemleri.
 
 function tsToMillis(ts) {
   if (!ts) return null;
@@ -40,24 +41,56 @@ function escapeHtml(str) {
   return d.innerHTML;
 }
 
-// ============ MASA EKLE ============
+// ============ MASA EKLE (Tekli veya Toplu) ============
 document.getElementById("addTableBtn").addEventListener("click", () => openModal("addTableModal"));
 
 document.getElementById("addTableForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const name = document.getElementById("newTableName").value.trim();
-  if (!name) return;
-  await KafeDB.tablesCol(State.businessId).add({
-    name,
-    status: "empty",
-    openedAt: null,
-    cart: [],
-    total: 0,
-    waiterCall: false,
-  });
+  const raw = document.getElementById("newTableName").value.trim();
+  if (!raw) return;
+
+  // Sadece sayı girildiyse (örn. "10"), o adette masa otomatik oluşturulur.
+  const isBulkCount = /^\d+$/.test(raw) && Number(raw) > 0;
+
+  if (isBulkCount) {
+    const count = Math.min(Number(raw), 200); // güvenlik sınırı
+    const existingNumbers = State.tables
+      .map((t) => {
+        const m = (t.name || "").match(/^Masa (\d+)$/);
+        return m ? Number(m[1]) : null;
+      })
+      .filter((n) => n !== null);
+    const startFrom = existingNumbers.length ? Math.max(...existingNumbers) + 1 : 1;
+
+    const batch = db.batch();
+    for (let i = 0; i < count; i++) {
+      const num = startFrom + i;
+      const ref = KafeDB.tablesCol(State.businessId).doc();
+      batch.set(ref, {
+        name: `Masa ${num}`,
+        status: "empty",
+        openedAt: null,
+        cart: [],
+        total: 0,
+        waiterCall: false,
+      });
+    }
+    await batch.commit();
+    showToast(`${count} masa otomatik oluşturuldu.`);
+  } else {
+    await KafeDB.tablesCol(State.businessId).add({
+      name: raw,
+      status: "empty",
+      openedAt: null,
+      cart: [],
+      total: 0,
+      waiterCall: false,
+    });
+    showToast("Masa eklendi.");
+  }
+
   document.getElementById("newTableName").value = "";
   closeModal("addTableModal");
-  showToast("Masa eklendi.");
 });
 
 // ============ MASA / ADİSYON MODALI ============
@@ -148,7 +181,8 @@ function renderQuickAddGrid(filterText) {
   }
 
   filtered.forEach((p) => {
-    const outOfStock = Number(p.stock) <= 0;
+    // Stok takipsiz ürünlerde (örn. çay) stok 0 olsa bile sipariş engeli olmaz.
+    const outOfStock = p.trackStock !== false && Number(p.stock) <= 0;
     const card = document.createElement("div");
     card.className = "quick-add-card" + (outOfStock ? " out-of-stock" : "");
     card.innerHTML = `
@@ -176,7 +210,7 @@ function addProductToCart(product) {
   renderOrderItems();
 }
 
-// ============ KAYDET ============
+// ============ KAYDET (kaydeder, modalı kapatır ve Masalar menüsüne döner) ============
 document.getElementById("saveOrderBtn").addEventListener("click", async () => {
   if (!State.openTableId) return;
   const total = currentCartTotal();
@@ -188,6 +222,9 @@ document.getElementById("saveOrderBtn").addEventListener("click", async () => {
     status: State.cart.length > 0 ? "occupied" : "empty",
     openedAt: State.cart.length > 0 ? (table.openedAt || firebase.firestore.FieldValue.serverTimestamp()) : null,
   });
+
+  closeModal("tableModal");
+  if (typeof goToTablesPanel === "function") goToTablesPanel();
   showToast("Adisyon kaydedildi.");
 });
 
@@ -256,10 +293,10 @@ document.querySelectorAll(".payment-method-btn").forEach((btn) => {
     const table = State.tables.find((t) => t.id === State.openTableId);
     const total = currentCartTotal();
 
-    // Stok düşümü
+    // Stok düşümü (sadece stok takibi açık olan ürünlerde yapılır)
     for (const item of State.cart) {
       const product = State.products.find((p) => p.id === item.productId);
-      if (product) {
+      if (product && product.trackStock !== false) {
         const newStock = Math.max(0, Number(product.stock) - item.qty);
         await KafeDB.productsCol(State.businessId).doc(product.id).update({ stock: newStock });
       }
@@ -289,3 +326,79 @@ document.querySelectorAll(".payment-method-btn").forEach((btn) => {
     showToast(`Ödeme alındı (${method}) — ${formatCurrency(total)}`);
   });
 });
+
+// ============ QR MENÜDEN GELEN SİPARİŞLER (Onay Bekleyenler) ============
+function renderPendingOrdersList() {
+  const list = document.getElementById("pendingOrdersList");
+  if (!list) return;
+  list.innerHTML = "";
+
+  if (State.pendingOrders.length === 0) {
+    list.innerHTML = `<p class="text-gray-400 text-sm text-center py-6">Bekleyen sipariş yok.</p>`;
+    return;
+  }
+
+  State.pendingOrders.forEach((o) => {
+    const itemsSummary = (o.items || []).map((i) => `${i.qty}× ${escapeHtml(i.name)}`).join(", ");
+    const box = document.createElement("div");
+    box.className = "pending-order-card";
+    box.innerHTML = `
+      <div class="flex items-center justify-between">
+        <span class="font-display font-bold">${escapeHtml(o.tableName || "Masa")}</span>
+        <span class="font-mono font-bold">${formatCurrency(o.total)}</span>
+      </div>
+      <div class="text-xs text-gray-500 my-2">${itemsSummary || "-"}</div>
+      <div class="flex gap-2">
+        <button class="action-btn action-green flex-1" data-approve="${o.id}">✅ Onayla</button>
+        <button class="action-btn action-red flex-1" data-reject="${o.id}">✕ Reddet</button>
+      </div>
+    `;
+    list.appendChild(box);
+  });
+
+  list.querySelectorAll("[data-approve]").forEach((btn) => {
+    btn.addEventListener("click", () => approvePendingOrder(btn.dataset.approve));
+  });
+  list.querySelectorAll("[data-reject]").forEach((btn) => {
+    btn.addEventListener("click", () => rejectPendingOrder(btn.dataset.reject));
+  });
+}
+
+// Onaylanan sipariş otomatik olarak ilgili masanın adisyonuna eklenir.
+async function approvePendingOrder(orderId) {
+  const order = State.pendingOrders.find((o) => o.id === orderId);
+  if (!order) return;
+
+  const table = State.tables.find((t) => t.id === order.tableId);
+  if (!table) {
+    showToast("Masa bulunamadı, sipariş reddedildi.");
+    await KafeDB.pendingOrdersCol(State.businessId).doc(orderId).update({ status: "rejected" });
+    return;
+  }
+
+  const newCart = JSON.parse(JSON.stringify(table.cart || []));
+  (order.items || []).forEach((item) => {
+    const existing = newCart.find((i) => i.productId === item.productId);
+    if (existing) {
+      existing.qty += item.qty;
+    } else {
+      newCart.push({ productId: item.productId, name: item.name, price: item.price, qty: item.qty });
+    }
+  });
+  const newTotal = newCart.reduce((sum, i) => sum + i.price * i.qty, 0);
+
+  await KafeDB.tablesCol(State.businessId).doc(order.tableId).update({
+    cart: newCart,
+    total: newTotal,
+    status: "occupied",
+    openedAt: table.openedAt || firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  await KafeDB.pendingOrdersCol(State.businessId).doc(orderId).update({ status: "approved" });
+
+  showToast(`Sipariş onaylandı ve ${order.tableName} adisyonuna eklendi.`);
+}
+
+async function rejectPendingOrder(orderId) {
+  await KafeDB.pendingOrdersCol(State.businessId).doc(orderId).update({ status: "rejected" });
+  showToast("Sipariş reddedildi.");
+}

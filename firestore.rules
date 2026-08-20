@@ -40,6 +40,14 @@ service cloud.firestore {
         allow create: if request.resource.data.keys().hasAll(['total', 'closedAt']);
         allow update, delete: if false; // Kapanan adisyon geçmişi değiştirilemez.
       }
+
+      // ---- QR Menüden Gelen Onay Bekleyen Siparişler ----
+      match /pendingOrders/{orderId} {
+        allow read: if true; // Garson/yönetici ekranı bekleyen siparişleri dinler.
+        allow create: if request.resource.data.keys().hasAll(['tableId', 'items', 'total', 'status']);
+        allow update: if true; // Onay/Red durumu güncellenir.
+        allow delete: if true;
+      }
     }
   }
 }

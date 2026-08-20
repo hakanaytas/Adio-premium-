@@ -1,6 +1,6 @@
 // Hakan Aytaş CodeBug yapımıdır - İletişim: hffhakan@gmail.com
 // app.js
-// Kimlik doğrulama (giriş/kayıt), canlı saat, panel navigasyonu ve
+// Kimlik doğrulama (giriş/kayıt), panel navigasyonu ve
 // tüm modüllerin paylaştığı global durum (State) burada yönetilir.
 
 const State = {
@@ -8,10 +8,13 @@ const State = {
   businessName: null,
   products: [],        // aktif ürün listesi (canlı dinlenir)
   tables: [],           // aktif masa listesi (canlı dinlenir)
+  pendingOrders: [],    // QR menüden gelip onay bekleyen siparişler (canlı dinlenir)
   openTableId: null,    // şu an adisyon modalında açık olan masa
   cart: [],             // açık masanın geçici sepeti (henüz kaydedilmemiş satırlar dahil)
+  reportUnlocked: false, // Z raporu / ciro bölümünün şifre ile açılıp açılmadığı
   unsubProducts: null,
   unsubTables: null,
+  unsubPendingOrders: null,
 };
 
 // ============ YARDIMCI FONKSİYONLAR ============
@@ -50,23 +53,32 @@ function elapsedSince(timestampMillis) {
   return `${h} sa ${m} dk`;
 }
 
-// ============ CANLI SAAT ============
-function tickClock() {
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  const dateStr = now.toLocaleDateString("tr-TR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
-  const timeEl = document.getElementById("clockTime");
-  const dateEl = document.getElementById("clockDate");
-  if (timeEl) timeEl.textContent = timeStr;
-  if (dateEl) dateEl.textContent = dateStr;
-}
-setInterval(tickClock, 1000);
-tickClock();
-
 // Masa kartlarındaki "açılış süresi" göstergelerini her dakika tazele
 setInterval(() => {
   if (typeof renderTables === "function" && State.businessId) renderTables();
 }, 30000);
+
+// ============ PANELE GEÇİŞ (dışarıdan da çağrılabilir, örn. Kaydet sonrası) ============
+function goToPanel(panelId) {
+  document.querySelectorAll(".sidenav-btn").forEach((b) => b.classList.remove("active"));
+  const targetBtn = document.querySelector(`.sidenav-btn[data-panel="${panelId}"]`);
+  if (targetBtn) targetBtn.classList.add("active");
+
+  document.querySelectorAll(".panel").forEach((p) => p.classList.add("hidden"));
+  const targetPanel = document.getElementById(panelId);
+  if (targetPanel) targetPanel.classList.remove("hidden");
+
+  if (panelId === "panelStock" && typeof renderStockList === "function") {
+    renderStockList();
+  }
+  if (panelId === "panelReport") {
+    lockReportPanel();
+  }
+}
+
+function goToTablesPanel() {
+  goToPanel("panelTables");
+}
 
 // ============ AUTH: TAB GEÇİŞİ ============
 const tabLoginBtn = document.getElementById("tabLoginBtn");
@@ -96,8 +108,9 @@ registerForm.addEventListener("submit", async (e) => {
   const name = document.getElementById("regBusinessName").value.trim();
   const id = document.getElementById("regBusinessId").value.trim().toLowerCase().replace(/\s+/g, "_");
   const pass = document.getElementById("regPassword").value;
+  const reportPass = document.getElementById("regReportPassword").value;
 
-  if (!name || !id || !pass) return;
+  if (!name || !id || !pass || !reportPass) return;
 
   try {
     const ref = KafeDB.businessDoc(id);
@@ -110,6 +123,7 @@ registerForm.addEventListener("submit", async (e) => {
     await ref.set({
       name,
       password: pass, // NOT: Üretimde bu alan bir Cloud Function ile hash'lenmelidir.
+      reportPassword: reportPass, // Z raporu / ciro bölümü için ayrı şifre (personel giremesin).
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
     showToast("İşletme oluşturuldu, giriş yapılıyor...");
@@ -158,12 +172,14 @@ async function loginBusiness(id, name) {
 
   startProductsListener();
   startTablesListener();
+  startPendingOrdersListener();
   if (typeof initQrPanel === "function") initQrPanel();
 }
 
 document.getElementById("logoutBtn").addEventListener("click", () => {
   if (State.unsubProducts) State.unsubProducts();
   if (State.unsubTables) State.unsubTables();
+  if (State.unsubPendingOrders) State.unsubPendingOrders();
   localStorage.removeItem("kafe_business_id");
   location.reload();
 });
@@ -171,17 +187,7 @@ document.getElementById("logoutBtn").addEventListener("click", () => {
 // ============ PANEL NAVİGASYONU ============
 document.querySelectorAll(".sidenav-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".sidenav-btn").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    document.querySelectorAll(".panel").forEach((p) => p.classList.add("hidden"));
-    document.getElementById(btn.dataset.panel).classList.remove("hidden");
-
-    if (btn.dataset.panel === "panelReport" && typeof renderDayEndReport === "function") {
-      renderDayEndReport();
-    }
-    if (btn.dataset.panel === "panelStock" && typeof renderStockList === "function") {
-      renderStockList();
-    }
+    goToPanel(btn.dataset.panel);
   });
 });
 
@@ -208,6 +214,16 @@ function startTablesListener() {
     });
 }
 
+function startPendingOrdersListener() {
+  State.unsubPendingOrders = KafeDB.pendingOrdersCol(State.businessId)
+    .where("status", "==", "pending")
+    .onSnapshot((snap) => {
+      State.pendingOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      updatePendingOrdersBadge();
+      if (typeof renderPendingOrdersList === "function") renderPendingOrdersList();
+    });
+}
+
 function updateWaiterAlertBadge() {
   const calling = State.tables.filter((t) => t.waiterCall);
   const btn = document.getElementById("waiterAlertBtn");
@@ -219,12 +235,68 @@ function updateWaiterAlertBadge() {
   }
 }
 
+function updatePendingOrdersBadge() {
+  const btn = document.getElementById("pendingOrdersBtn");
+  if (!btn) return;
+  if (State.pendingOrders.length > 0) {
+    btn.classList.remove("hidden");
+    btn.textContent = `🛎️ Yeni Sipariş (${State.pendingOrders.length})`;
+  } else {
+    btn.classList.add("hidden");
+  }
+}
+
 document.getElementById("waiterAlertBtn").addEventListener("click", () => {
   const calling = State.tables.filter((t) => t.waiterCall);
   if (calling.length && typeof openTableModal === "function") {
     openTableModal(calling[0].id);
   }
 });
+
+document.getElementById("pendingOrdersBtn").addEventListener("click", () => {
+  if (typeof renderPendingOrdersList === "function") renderPendingOrdersList();
+  openModal("pendingOrdersModal");
+});
+
+// ============ Z RAPORU / CİRO PANELİ ŞİFRE KİLİDİ ============
+function lockReportPanel() {
+  State.reportUnlocked = false;
+  document.getElementById("reportPasswordGate").classList.remove("hidden");
+  document.getElementById("reportContent").classList.add("hidden");
+  document.getElementById("printReportBtn").classList.add("hidden");
+  document.getElementById("reportPasswordInput").value = "";
+  document.getElementById("reportPasswordError").classList.add("hidden");
+}
+
+document.getElementById("reportUnlockBtn").addEventListener("click", unlockReportPanel);
+document.getElementById("reportPasswordInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") unlockReportPanel();
+});
+
+async function unlockReportPanel() {
+  const errEl = document.getElementById("reportPasswordError");
+  errEl.classList.add("hidden");
+  const val = document.getElementById("reportPasswordInput").value;
+
+  try {
+    const snap = await KafeDB.businessDoc(State.businessId).get();
+    const data = snap.data() || {};
+    const expected = data.reportPassword || data.password; // eski işletmeler için geriye dönük uyum
+    if (!val || val !== expected) {
+      errEl.textContent = "Şifre yanlış. Bu bölüme sadece yetkili yönetici erişebilir.";
+      errEl.classList.remove("hidden");
+      return;
+    }
+    State.reportUnlocked = true;
+    document.getElementById("reportPasswordGate").classList.add("hidden");
+    document.getElementById("reportContent").classList.remove("hidden");
+    document.getElementById("printReportBtn").classList.remove("hidden");
+    if (typeof renderDayEndReport === "function") renderDayEndReport();
+  } catch (err) {
+    errEl.textContent = "Kontrol sırasında hata oluştu: " + err.message;
+    errEl.classList.remove("hidden");
+  }
+}
 
 // ============ GİRİŞ SAYFASI ROTASI / QR PUBLIC MENÜ KONTROLÜ ============
 (function initRoute() {

@@ -38,4 +38,8 @@ const KafeDB = {
   ordersCol(businessId) {
     return this.businessDoc(businessId).collection("orders");
   },
+  // QR menüden gelen, henüz garson/yönetici tarafından onaylanmamış siparişler.
+  pendingOrdersCol(businessId) {
+    return this.businessDoc(businessId).collection("pendingOrders");
+  },
 };

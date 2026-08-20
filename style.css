@@ -6,6 +6,8 @@
   --kafe-red: #EF4444;
   --kafe-green: #22C55E;
   --kafe-blue: #3B82F6;
+  --sidenav-w: 96px;
+  --sidenav-gap: 18px;
 }
 
 * { box-sizing: border-box; }
@@ -37,7 +39,7 @@ html, body {
 /* ============ ÜST BAR ============ */
 .topbar {
   position: fixed;
-  top: 0; left: 96px; right: 0;
+  top: 0; left: calc(var(--sidenav-w) + var(--sidenav-gap) * 2); right: 0;
   height: 76px;
   display: flex;
   align-items: center;
@@ -49,35 +51,17 @@ html, body {
   z-index: 40;
 }
 
-.clock-box {
-  text-align: center;
-  background: rgba(251, 191, 36, 0.12);
-  border: 1px solid rgba(251, 191, 36, 0.35);
-  border-radius: 1.25rem;
-  padding: 6px 22px;
-}
-.clock-time {
-  font-family: 'DM Mono', monospace;
-  font-size: 1.6rem;
-  font-weight: 500;
-  letter-spacing: 1px;
-  color: #92400E;
-  line-height: 1.1;
-}
-.clock-date {
-  font-size: 0.7rem;
-  color: #92400E;
-  text-transform: capitalize;
-}
-
-/* ============ SOL SEKME MENÜSÜ ============ */
+/* ============ SOL SEKME MENÜSÜ (kavisli / cam efektli) ============ */
 .sidenav {
   position: fixed;
-  top: 0; left: 0; bottom: 0;
-  width: 96px;
-  background: rgba(255,255,255,0.75);
-  backdrop-filter: blur(16px);
-  border-right: 1px solid rgba(0,0,0,0.06);
+  top: var(--sidenav-gap); left: var(--sidenav-gap); bottom: var(--sidenav-gap);
+  width: var(--sidenav-w);
+  background: rgba(255,255,255,0.55);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255,255,255,0.55);
+  border-radius: 2rem;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.14);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -108,7 +92,7 @@ html, body {
 
 /* ============ GENEL LAYOUT ============ */
 .app-wrap {
-  margin-left: 96px;
+  margin-left: calc(var(--sidenav-w) + var(--sidenav-gap) * 2);
   padding: 96px 28px 40px;
   min-height: 100vh;
 }
@@ -145,6 +129,7 @@ html, body {
   box-shadow: 0 4px 14px rgba(251,191,36,0.4);
 }
 .btn-primary:hover { background: var(--kafe-yellow-dark); transform: translateY(-1px); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
 .btn-secondary {
   background: rgba(255,255,255,0.9);
@@ -179,6 +164,7 @@ html, body {
   transition: all .15s ease;
 }
 .input-field:focus { border-color: var(--kafe-yellow); box-shadow: 0 0 0 3px rgba(251,191,36,0.2); }
+.input-field:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ============ AUTH EKRANI ============ */
 .auth-wrap {
@@ -385,6 +371,7 @@ html, body {
 .stock-card-qty { font-size: 0.75rem; margin-top: 4px; font-weight: 600; }
 .stock-card-qty.low { color: var(--kafe-red); }
 .stock-card-qty.ok { color: var(--kafe-green); }
+.stock-card-qty.untracked { color: var(--kafe-blue); }
 
 /* ============ ÖDEME YÖNTEMİ ============ */
 .payment-method-btn {
@@ -410,11 +397,29 @@ html, body {
 }
 .qr-box img { width: 100%; height: 100%; object-fit: contain; }
 
+/* ============ BEKLEYEN SİPARİŞ KARTI ============ */
+.pending-order-card {
+  background: rgba(34,197,94,0.06);
+  border: 1px solid rgba(34,197,94,0.25);
+  border-radius: 1.25rem;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+/* ============ RAPOR GRAFİKLERİ ============ */
+.report-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  max-width: 900px;
+}
+.report-charts-grid canvas { max-height: 280px; }
+
 /* ============ PUBLIC MENU (QR) ============ */
 .public-menu-wrap {
   min-height: 100vh;
   background: linear-gradient(180deg, #78350F 0%, #F59E0B 100%);
-  padding: 30px 16px 60px;
+  padding: 30px 16px 100px;
 }
 .public-menu-header { text-align: center; color: #fff; margin-bottom: 18px; }
 .public-menu-search { max-width: 480px; margin: 0 auto 20px; }
@@ -431,9 +436,54 @@ html, body {
   padding: 16px;
   box-shadow: 0 8px 20px rgba(0,0,0,0.15);
 }
+.public-menu-item.sold-out { opacity: 0.55; }
 .public-menu-item .pname { font-family: 'Poppins', sans-serif; font-weight: 700; }
 .public-menu-item .pcat { font-size: 0.68rem; color: var(--kafe-yellow-dark); font-weight: 700; text-transform: uppercase; }
 .public-menu-item .pprice { font-family: 'DM Mono', monospace; font-weight: 700; margin-top: 8px; color: #78350F; }
+.public-add-btn {
+  margin-top: 10px;
+  width: 100%;
+  background: var(--kafe-yellow);
+  color: #78350F;
+  font-weight: 700;
+  font-size: 0.78rem;
+  padding: 8px;
+  border-radius: 1rem;
+  transition: all .15s ease;
+}
+.public-add-btn:hover { background: var(--kafe-yellow-dark); }
+.ptag-out {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--kafe-red);
+  background: rgba(239,68,68,0.1);
+  border-radius: 1rem;
+  padding: 8px;
+}
+
+/* ============ MÜŞTERİ SEPET BARI ============ */
+.public-cart-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 480px;
+  background: rgba(31,41,55,0.92);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  border-radius: 1.5rem;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.3);
+  z-index: 60;
+}
+.public-cart-info { display: flex; flex-direction: column; font-size: 0.8rem; }
+.public-cart-info span:first-child { font-weight: 700; }
 
 /* ============ TOAST ============ */
 .toast-box {
@@ -482,20 +532,17 @@ html, body {
 /* ============ TELEFON / KÜÇÜK EKRAN UYUMU ============ */
 @media (max-width: 700px) {
   .sidenav {
-    top: auto; bottom: 0; left: 0; right: 0; width: 100%; height: 68px;
+    top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; height: 68px;
     flex-direction: row; justify-content: space-around; align-items: center;
-    padding-top: 0; border-right: none; border-top: 1px solid rgba(0,0,0,0.06);
+    padding-top: 0; border-radius: 1.75rem;
   }
   .sidenav-btn { width: auto; flex: 1; padding: 8px 2px; }
 
   .topbar { left: 0; padding: 0 14px; height: 64px; }
-  .clock-box { padding: 4px 12px; }
-  .clock-time { font-size: 1.1rem; }
-  .clock-date { display: none; }
   #businessNameLabel { font-size: 0.95rem; }
   #businessIdLabel { font-size: 0.65rem; }
 
-  .app-wrap { margin-left: 0; padding: 78px 14px 90px; }
+  .app-wrap { margin-left: 0; padding: 78px 14px 100px; }
 
   .tables-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
   .stock-list { grid-template-columns: 1fr 1fr; }
@@ -505,6 +552,8 @@ html, body {
   .modal-box, .modal-box-wide { padding: 18px; }
   .auth-card { padding: 22px; }
   .public-menu-list { grid-template-columns: 1fr; }
+  .report-charts-grid { grid-template-columns: 1fr; }
+  .public-cart-bar { bottom: 82px; }
 }
 
 @media (max-width: 420px) {
