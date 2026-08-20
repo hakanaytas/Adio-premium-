@@ -1,0 +1,45 @@
+// Hakan Aytaş CodeBug yapımıdır - İletişim: hffhakan@gmail.com
+// firestore.rules
+// Firebase Console > Firestore Database > Rules bölümüne yapıştırın.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /businesses/{businessId} {
+
+      // Giriş ekranında şifre kontrolü yapılabilmesi için doküman okunabilir olmalı.
+      allow get: if true;
+      allow list: if false; // İşletme listesi dışarıya asla açılmaz.
+
+      // Kayıt (register): sadece o business_id daha önce alınmamışsa oluşturulabilir.
+      allow create: if request.resource.data.keys().hasAll(['name', 'password'])
+                    && request.resource.data.name is string
+                    && request.resource.data.password is string;
+
+      // İşletme dokümanının (şifre dahil) dışarıdan güncellenmesi/silinmesi kapalı.
+      allow update, delete: if false;
+
+      // ---- Masalar ----
+      match /tables/{tableId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasAll(['name', 'status']);
+        allow update: if true;
+        allow delete: if true;
+      }
+
+      // ---- Ürünler / Stok ----
+      match /products/{productId} {
+        allow read: if true; // QR menü herkese açık olduğu için okumaya izin verilir.
+        allow write: if request.resource.data.keys().hasAll(['name', 'price', 'stock']);
+      }
+
+      // ---- Kapanan Adisyonlar (Gün Sonu Raporu) ----
+      match /orders/{orderId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasAll(['total', 'closedAt']);
+        allow update, delete: if false; // Kapanan adisyon geçmişi değiştirilemez.
+      }
+    }
+  }
+}

@@ -1,0 +1,514 @@
+/* Hakan Aytaş CodeBug yapımıdır - İletişim: hffhakan@gmail.com */
+
+:root {
+  --kafe-yellow: #FBBF24;
+  --kafe-yellow-dark: #F59E0B;
+  --kafe-red: #EF4444;
+  --kafe-green: #22C55E;
+  --kafe-blue: #3B82F6;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: #fafafa;
+}
+
+/* ============ ARKA PLAN (Blur Glassmorphism) ============ */
+.kafe-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background-image: url('https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=1600&auto=format&fit=crop');
+  background-size: cover;
+  background-position: center;
+  filter: blur(14px) brightness(0.9);
+  transform: scale(1.1);
+}
+.kafe-bg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+/* ============ ÜST BAR ============ */
+.topbar {
+  position: fixed;
+  top: 0; left: 96px; right: 0;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  z-index: 40;
+}
+
+.clock-box {
+  text-align: center;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: 1.25rem;
+  padding: 6px 22px;
+}
+.clock-time {
+  font-family: 'DM Mono', monospace;
+  font-size: 1.6rem;
+  font-weight: 500;
+  letter-spacing: 1px;
+  color: #92400E;
+  line-height: 1.1;
+}
+.clock-date {
+  font-size: 0.7rem;
+  color: #92400E;
+  text-transform: capitalize;
+}
+
+/* ============ SOL SEKME MENÜSÜ ============ */
+.sidenav {
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  width: 96px;
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(16px);
+  border-right: 1px solid rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 24px;
+  gap: 10px;
+  z-index: 50;
+}
+.sidenav-btn {
+  width: 76px;
+  padding: 10px 4px;
+  border-radius: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #6B7280;
+  background: transparent;
+  transition: all .15s ease;
+}
+.sidenav-btn:hover { background: rgba(251,191,36,0.12); color: #92400E; }
+.sidenav-btn.active {
+  background: var(--kafe-yellow);
+  color: #78350F;
+  box-shadow: 0 4px 12px rgba(251,191,36,0.4);
+}
+
+/* ============ GENEL LAYOUT ============ */
+.app-wrap {
+  margin-left: 96px;
+  padding: 96px 28px 40px;
+  min-height: 100vh;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.panel-title {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 1.4rem;
+  color: #1F2937;
+}
+
+/* ============ GLASS CARD ============ */
+.glass-card {
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: 1.25rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+}
+
+/* ============ BUTONLAR ============ */
+.btn-primary {
+  background: var(--kafe-yellow);
+  color: #78350F;
+  font-weight: 700;
+  padding: 12px 20px;
+  border-radius: 1.25rem;
+  transition: all .15s ease;
+  box-shadow: 0 4px 14px rgba(251,191,36,0.4);
+}
+.btn-primary:hover { background: var(--kafe-yellow-dark); transform: translateY(-1px); }
+
+.btn-secondary {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(0,0,0,0.08);
+  color: #374151;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 1.25rem;
+  transition: all .15s ease;
+}
+.btn-secondary:hover { background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+
+.btn-danger {
+  background: rgba(239,68,68,0.1);
+  color: var(--kafe-red);
+  font-weight: 700;
+  padding: 12px 20px;
+  border-radius: 1.25rem;
+  border: 1px solid rgba(239,68,68,0.3);
+}
+.btn-danger:hover { background: rgba(239,68,68,0.18); }
+
+/* ============ INPUT ============ */
+.input-field {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 1.25rem;
+  border: 1px solid rgba(0,0,0,0.1);
+  background: rgba(255,255,255,0.9);
+  font-size: 0.9rem;
+  outline: none;
+  transition: all .15s ease;
+}
+.input-field:focus { border-color: var(--kafe-yellow); box-shadow: 0 0 0 3px rgba(251,191,36,0.2); }
+
+/* ============ AUTH EKRANI ============ */
+.auth-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255,255,255,0.7);
+  border-radius: 1.5rem;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.12);
+  padding: 32px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 10px;
+  border-radius: 1rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #6B7280;
+  transition: all .15s ease;
+}
+.auth-tab.active { background: #fff; color: #1F2937; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+
+/* ============ MASA GRID ============ */
+.tables-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 18px;
+}
+.table-card {
+  background: rgba(255,255,255,0.85);
+  border: 2px solid #E5E7EB;
+  border-radius: 1.25rem;
+  padding: 18px;
+  cursor: pointer;
+  transition: all .15s ease;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+}
+.table-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(0,0,0,0.1); }
+.table-card.occupied {
+  border-color: var(--kafe-green);
+  background: rgba(34,197,94,0.08);
+}
+.table-card.waiter-call {
+  border-color: var(--kafe-blue);
+  animation: pulseBlue 1.4s infinite;
+}
+@keyframes pulseBlue {
+  0%,100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.35); }
+  50% { box-shadow: 0 0 0 8px rgba(59,130,246,0); }
+}
+.table-card-name { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 1.05rem; }
+.table-card-status { font-size: 0.72rem; font-weight: 600; margin-top: 2px; }
+.table-card.occupied .table-card-status { color: #15803D; }
+.table-card:not(.occupied) .table-card-status { color: #9CA3AF; }
+.table-card-time { font-family: 'DM Mono', monospace; font-size: 0.75rem; color: #6B7280; margin-top: 10px; }
+.table-card-total { font-family: 'DM Mono', monospace; font-weight: 600; font-size: 1.1rem; margin-top: 4px; color: #1F2937; }
+
+/* ============ MODAL ============ */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+.modal-box {
+  background: #fff;
+  border-radius: 1.5rem;
+  padding: 26px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+}
+.modal-box-wide { max-width: 900px; }
+.modal-close {
+  width: 32px; height: 32px;
+  border-radius: 1rem;
+  background: #F3F4F6;
+  font-weight: 700;
+  color: #6B7280;
+}
+.modal-close:hover { background: #E5E7EB; }
+
+.table-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media (max-width: 720px) {
+  .table-modal-grid { grid-template-columns: 1fr; }
+}
+
+.order-items-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #E5E7EB;
+  border-radius: 1.25rem;
+  padding: 10px;
+  min-height: 120px;
+}
+.order-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 6px;
+  border-bottom: 1px solid #F3F4F6;
+  font-size: 0.85rem;
+}
+.order-item-row:last-child { border-bottom: none; }
+.qty-btn {
+  width: 22px; height: 22px;
+  border-radius: 0.6rem;
+  background: #F3F4F6;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+.qty-btn:hover { background: #E5E7EB; }
+
+.order-total-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 1.2rem;
+  margin-top: 14px;
+  padding: 12px 16px;
+  background: rgba(251,191,36,0.12);
+  border-radius: 1.25rem;
+}
+
+.order-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+.action-btn {
+  padding: 12px;
+  border-radius: 1.25rem;
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: #fff;
+  transition: all .15s ease;
+}
+.action-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+.action-green { background: var(--kafe-green); }
+.action-red { background: var(--kafe-red); }
+.action-yellow { background: var(--kafe-yellow); color: #78350F; }
+.action-blue { background: var(--kafe-blue); }
+
+.quick-add-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+.quick-add-card {
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 1.25rem;
+  padding: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.quick-add-card:hover { background: var(--kafe-yellow); transform: scale(1.03); }
+.quick-add-card .qname { font-weight: 600; font-size: 0.78rem; }
+.quick-add-card .qprice { font-family: 'DM Mono', monospace; font-size: 0.75rem; color: #92400E; margin-top: 4px; }
+.quick-add-card.out-of-stock { opacity: 0.4; cursor: not-allowed; }
+
+/* ============ STOK LİSTESİ ============ */
+.stock-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+}
+.stock-card {
+  background: rgba(255,255,255,0.85);
+  border-radius: 1.25rem;
+  padding: 16px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.stock-card:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(0,0,0,0.1); }
+.stock-card-cat { font-size: 0.7rem; font-weight: 700; color: var(--kafe-yellow-dark); text-transform: uppercase; }
+.stock-card-name { font-family: 'Poppins', sans-serif; font-weight: 700; margin-top: 2px; }
+.stock-card-price { font-family: 'DM Mono', monospace; font-weight: 600; margin-top: 8px; }
+.stock-card-qty { font-size: 0.75rem; margin-top: 4px; font-weight: 600; }
+.stock-card-qty.low { color: var(--kafe-red); }
+.stock-card-qty.ok { color: var(--kafe-green); }
+
+/* ============ ÖDEME YÖNTEMİ ============ */
+.payment-method-btn {
+  padding: 20px;
+  border-radius: 1.25rem;
+  background: #F9FAFB;
+  border: 2px solid #E5E7EB;
+  font-weight: 700;
+  transition: all .15s ease;
+}
+.payment-method-btn:hover { border-color: var(--kafe-green); background: rgba(34,197,94,0.08); }
+
+/* ============ QR BOX ============ */
+.qr-box {
+  width: 220px; height: 220px;
+  background: #fff;
+  border-radius: 1.25rem;
+  border: 1px solid #E5E7EB;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+}
+.qr-box img { width: 100%; height: 100%; object-fit: contain; }
+
+/* ============ PUBLIC MENU (QR) ============ */
+.public-menu-wrap {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #78350F 0%, #F59E0B 100%);
+  padding: 30px 16px 60px;
+}
+.public-menu-header { text-align: center; color: #fff; margin-bottom: 18px; }
+.public-menu-search { max-width: 480px; margin: 0 auto 20px; }
+.public-menu-list {
+  max-width: 720px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.public-menu-item {
+  background: rgba(255,255,255,0.92);
+  border-radius: 1.25rem;
+  padding: 16px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+}
+.public-menu-item .pname { font-family: 'Poppins', sans-serif; font-weight: 700; }
+.public-menu-item .pcat { font-size: 0.68rem; color: var(--kafe-yellow-dark); font-weight: 700; text-transform: uppercase; }
+.public-menu-item .pprice { font-family: 'DM Mono', monospace; font-weight: 700; margin-top: 8px; color: #78350F; }
+
+/* ============ TOAST ============ */
+.toast-box {
+  position: fixed;
+  bottom: 24px; left: 50%;
+  transform: translateX(-50%);
+  background: #1F2937;
+  color: #fff;
+  padding: 12px 22px;
+  border-radius: 1.25rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  z-index: 200;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+/* ============ FOOTER ============ */
+.app-footer {
+  position: relative;
+  text-align: center;
+  font-size: 0.7rem;
+  color: #9CA3AF;
+  padding: 14px;
+}
+
+/* ============ RAPOR ============ */
+.report-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #F3F4F6;
+}
+.report-row:last-child { border-bottom: none; }
+.report-label { color: #6B7280; font-size: 0.88rem; }
+.report-value { font-family: 'DM Mono', monospace; font-weight: 700; }
+
+/* ============ YAZDIRMA ============ */
+@media print {
+  .kafe-bg, .kafe-bg-overlay, .topbar, .sidenav, .app-footer, .modal-close,
+  #panelReport .btn-secondary { display: none !important; }
+  body { background: #fff; }
+}
+
+.hidden { display: none !important; }
+
+/* ============ TELEFON / KÜÇÜK EKRAN UYUMU ============ */
+@media (max-width: 700px) {
+  .sidenav {
+    top: auto; bottom: 0; left: 0; right: 0; width: 100%; height: 68px;
+    flex-direction: row; justify-content: space-around; align-items: center;
+    padding-top: 0; border-right: none; border-top: 1px solid rgba(0,0,0,0.06);
+  }
+  .sidenav-btn { width: auto; flex: 1; padding: 8px 2px; }
+
+  .topbar { left: 0; padding: 0 14px; height: 64px; }
+  .clock-box { padding: 4px 12px; }
+  .clock-time { font-size: 1.1rem; }
+  .clock-date { display: none; }
+  #businessNameLabel { font-size: 0.95rem; }
+  #businessIdLabel { font-size: 0.65rem; }
+
+  .app-wrap { margin-left: 0; padding: 78px 14px 90px; }
+
+  .tables-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+  .stock-list { grid-template-columns: 1fr 1fr; }
+  .table-modal-grid { grid-template-columns: 1fr; }
+  .quick-add-grid { grid-template-columns: repeat(3, 1fr); max-height: 260px; }
+  .order-buttons { grid-template-columns: 1fr 1fr; }
+  .modal-box, .modal-box-wide { padding: 18px; }
+  .auth-card { padding: 22px; }
+  .public-menu-list { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 420px) {
+  .tables-grid { grid-template-columns: 1fr 1fr; }
+  .stock-list { grid-template-columns: 1fr; }
+  .quick-add-grid { grid-template-columns: repeat(2, 1fr); }
+}

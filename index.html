@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kafe Adisyon &amp; Stok Yönetim Sistemi</title>
+
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<!-- Tailwind CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          kafe: {
+            yellow: '#FBBF24',
+            yellowDark: '#F59E0B',
+            red: '#EF4444',
+            green: '#22C55E',
+            blue: '#3B82F6',
+          }
+        },
+        fontFamily: {
+          display: ['Poppins', 'sans-serif'],
+          body: ['Inter', 'sans-serif'],
+          mono: ['DM Mono', 'monospace'],
+        },
+        borderRadius: {
+          '2xl': '1.25rem',
+        }
+      }
+    }
+  }
+</script>
+
+<!-- Firebase (compat SDK, tek script - modül gerektirmez) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<link rel="stylesheet" href="style.css" />
+</head>
+<body class="font-body text-gray-800">
+
+<!-- Bulanık kafe arka planı -->
+<div class="kafe-bg"></div>
+<div class="kafe-bg-overlay"></div>
+
+<!-- ============ ÜST BAR ============ -->
+<header id="topBar" class="topbar hidden">
+  <div class="flex items-center gap-3">
+    <div class="w-11 h-11 rounded-2xl bg-kafe-yellow flex items-center justify-center text-xl shadow-md">☕</div>
+    <div>
+      <h1 class="font-display font-bold text-lg leading-tight" id="businessNameLabel">Kafe</h1>
+      <p class="text-xs text-gray-500 leading-tight" id="businessIdLabel">—</p>
+    </div>
+  </div>
+
+  <div class="clock-box">
+    <div id="clockTime" class="clock-time">00:00:00</div>
+    <div id="clockDate" class="clock-date">-- -- ----</div>
+  </div>
+
+  <div class="flex items-center gap-2">
+    <button id="waiterAlertBtn" class="hidden relative px-4 py-2 rounded-2xl bg-kafe-blue text-white font-semibold text-sm shadow-md animate-pulse">
+      🔔 Garson Çağrısı
+    </button>
+    <button id="logoutBtn" class="px-4 py-2 rounded-2xl bg-white/80 border border-gray-200 font-semibold text-sm hover:bg-white transition">
+      Çıkış Yap
+    </button>
+  </div>
+</header>
+
+<!-- ============ SOL SEKME MENÜSÜ (PC/Tablet) ============ -->
+<nav id="sideNav" class="sidenav hidden">
+  <button data-panel="panelTables" class="sidenav-btn active">
+    <span class="text-2xl">🍽️</span>
+    <span>Masalar</span>
+  </button>
+  <button data-panel="panelStock" class="sidenav-btn">
+    <span class="text-2xl">📦</span>
+    <span>Stok &amp; Menü</span>
+  </button>
+  <button data-panel="panelQr" class="sidenav-btn">
+    <span class="text-2xl">🔗</span>
+    <span>QR Menü</span>
+  </button>
+  <button data-panel="panelReport" class="sidenav-btn">
+    <span class="text-2xl">📊</span>
+    <span>Gün Sonu</span>
+  </button>
+</nav>
+
+<!-- ============ GİRİŞ / KAYIT EKRANI ============ -->
+<main id="authScreen" class="auth-wrap">
+  <div class="auth-card">
+    <div class="text-center mb-6">
+      <div class="w-16 h-16 mx-auto rounded-2xl bg-kafe-yellow flex items-center justify-center text-3xl shadow-md mb-3">☕</div>
+      <h1 class="font-display font-extrabold text-2xl">Kafe Adisyon Sistemi</h1>
+      <p class="text-gray-500 text-sm mt-1">İşletmenize ait panele giriş yapın</p>
+    </div>
+
+    <div class="flex bg-gray-100 rounded-2xl p-1 mb-5">
+      <button id="tabLoginBtn" class="auth-tab active">Giriş Yap</button>
+      <button id="tabRegisterBtn" class="auth-tab">Kayıt Ol</button>
+    </div>
+
+    <!-- Giriş formu -->
+    <form id="loginForm" class="space-y-3">
+      <input required id="loginBusinessId" placeholder="İşletme ID (örn: kafe_102)" class="input-field" />
+      <input required id="loginPassword" type="password" placeholder="Şifre" class="input-field" />
+      <button type="submit" class="btn-primary w-full">Giriş Yap</button>
+      <p id="loginError" class="text-kafe-red text-sm text-center hidden"></p>
+    </form>
+
+    <!-- Kayıt formu -->
+    <form id="registerForm" class="space-y-3 hidden">
+      <input required id="regBusinessName" placeholder="İşletme Adı (örn: Sahil Kafe)" class="input-field" />
+      <input required id="regBusinessId" placeholder="Benzersiz İşletme ID (örn: kafe_102)" class="input-field" />
+      <input required id="regPassword" type="password" placeholder="Şifre belirleyin" class="input-field" />
+      <button type="submit" class="btn-primary w-full">İşletme Oluştur</button>
+      <p id="registerError" class="text-kafe-red text-sm text-center hidden"></p>
+    </form>
+  </div>
+</main>
+
+<!-- ============ UYGULAMA GÖVDESİ ============ -->
+<main id="appScreen" class="app-wrap hidden">
+
+  <!-- PANEL: MASALAR -->
+  <section id="panelTables" class="panel">
+    <div class="panel-head">
+      <h2 class="panel-title">Masalar</h2>
+      <button id="addTableBtn" class="btn-secondary">+ Masa Ekle</button>
+    </div>
+    <div id="tablesGrid" class="tables-grid"></div>
+  </section>
+
+  <!-- PANEL: STOK & MENÜ -->
+  <section id="panelStock" class="panel hidden">
+    <div class="panel-head">
+      <h2 class="panel-title">Stok &amp; Menü Yönetimi</h2>
+      <button id="addProductBtn" class="btn-secondary">+ Ürün Ekle</button>
+    </div>
+    <div class="glass-card p-4 mb-4">
+      <input id="stockSearchInput" placeholder="Ürün ara..." class="input-field" />
+    </div>
+    <div id="stockList" class="stock-list"></div>
+  </section>
+
+  <!-- PANEL: QR MENÜ -->
+  <section id="panelQr" class="panel hidden">
+    <div class="panel-head">
+      <h2 class="panel-title">Quark QR Menü</h2>
+    </div>
+    <div class="glass-card p-6 max-w-xl">
+      <p class="text-sm text-gray-600 mb-4">
+        Aşağıdaki QR kodu okutan müşterileriniz, işletmenizin güncel menüsünü canlı olarak görüntüler.
+        Menüde yaptığınız fiyat/stok değişiklikleri anında bu bağlantıya yansır.
+      </p>
+      <div class="flex flex-col items-center gap-4">
+        <div id="qrCodeBox" class="qr-box"></div>
+        <div class="w-full">
+          <label class="text-xs text-gray-500 font-semibold">Menü Bağlantısı</label>
+          <div class="flex gap-2 mt-1">
+            <input id="qrMenuLink" readonly class="input-field text-sm" />
+            <button id="copyQrLinkBtn" class="btn-secondary whitespace-nowrap">Kopyala</button>
+          </div>
+        </div>
+        <button id="openQrLinkBtn" class="btn-primary w-full">Menüyü Yeni Sekmede Aç</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- PANEL: GÜN SONU RAPORU -->
+  <section id="panelReport" class="panel hidden">
+    <div class="panel-head">
+      <h2 class="panel-title">Gün Sonu Yüzey Raporu</h2>
+      <button id="printReportBtn" class="btn-secondary">🖨️ Yazdır</button>
+    </div>
+    <div id="reportArea" class="glass-card p-6 max-w-3xl"></div>
+  </section>
+
+</main>
+
+<!-- ============ MASA / ADİSYON MODALI ============ -->
+<div id="tableModal" class="modal-overlay hidden">
+  <div class="modal-box modal-box-wide">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="tableModalTitle" class="font-display font-bold text-xl">Masa</h3>
+      <button data-close-modal="tableModal" class="modal-close">✕</button>
+    </div>
+
+    <div class="table-modal-grid">
+      <!-- SOL: ADİSYON -->
+      <div class="order-panel">
+        <div id="orderItemsList" class="order-items-list"></div>
+        <div class="order-total-box">
+          <span>Toplam</span>
+          <span id="orderTotalLabel">0,00 ₺</span>
+        </div>
+        <div class="order-buttons">
+          <button id="callWaiterBtn" class="action-btn action-blue">🔔 Garson Çağır</button>
+          <button id="printOrderBtn" class="action-btn action-yellow">🖨️ Adisyon Bastır</button>
+          <button id="saveOrderBtn" class="action-btn action-green">💾 Kaydet</button>
+          <button id="payOrderBtn" class="action-btn action-red">💳 Ödeme Al</button>
+        </div>
+      </div>
+
+      <!-- SAĞ: HIZLI ÜRÜN EKLEME -->
+      <div class="menu-panel">
+        <input id="orderSearchInput" placeholder="Ürün ara..." class="input-field mb-3" />
+        <div id="quickAddGrid" class="quick-add-grid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ÜRÜN EKLE / DÜZENLE MODALI ============ -->
+<div id="productModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-display font-bold text-xl">Ürün</h3>
+      <button data-close-modal="productModal" class="modal-close">✕</button>
+    </div>
+    <form id="productForm" class="space-y-3">
+      <input type="hidden" id="productId" />
+      <input required id="productName" placeholder="Ürün adı" class="input-field" />
+      <input required id="productCategory" placeholder="Kategori (örn: Sıcak İçecek)" class="input-field" />
+      <input required type="number" step="0.01" min="0" id="productPrice" placeholder="Fiyat (₺)" class="input-field" />
+      <input required type="number" step="1" min="0" id="productStock" placeholder="Stok Adedi" class="input-field" />
+      <div class="flex gap-2">
+        <button type="submit" class="btn-primary flex-1">Kaydet</button>
+        <button type="button" id="deleteProductBtn" class="btn-danger hidden">Sil</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ MASA EKLE MODALI ============ -->
+<div id="addTableModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-display font-bold text-xl">Yeni Masa</h3>
+      <button data-close-modal="addTableModal" class="modal-close">✕</button>
+    </div>
+    <form id="addTableForm" class="space-y-3">
+      <input required id="newTableName" placeholder="Masa adı (örn: Masa 7)" class="input-field" />
+      <button type="submit" class="btn-primary w-full">Masayı Oluştur</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============ ÖDEME ONAY MODALI ============ -->
+<div id="paymentModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-display font-bold text-xl">Ödeme Al</h3>
+      <button data-close-modal="paymentModal" class="modal-close">✕</button>
+    </div>
+    <p class="text-sm text-gray-600 mb-3">Toplam tutar: <span id="paymentTotalLabel" class="font-bold"></span></p>
+    <div class="grid grid-cols-2 gap-3">
+      <button data-method="Nakit" class="payment-method-btn">💵 Nakit</button>
+      <button data-method="Kart" class="payment-method-btn">💳 Kart</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ QUARK QR - PUBLIC MENÜ EKRANI ============ -->
+<main id="publicMenuScreen" class="public-menu-wrap hidden">
+  <div class="public-menu-header">
+    <h1 id="publicMenuTitle" class="font-display font-extrabold text-2xl">Kafe Menü</h1>
+    <p class="text-sm text-white/80">Güncel fiyat ve ürünler anlık olarak listelenmektedir</p>
+  </div>
+  <div id="publicMenuSearchWrap" class="public-menu-search">
+    <input id="publicMenuSearch" placeholder="Menüde ara..." class="input-field" />
+  </div>
+  <div id="publicMenuList" class="public-menu-list"></div>
+</main>
+
+<!-- Toast bildirim -->
+<div id="toastBox" class="toast-box hidden"></div>
+
+<footer class="app-footer">
+  <!-- Hakan Aytaş CodeBug yapımıdır - İletişim: hffhakan@gmail.com -->
+  Hakan Aytaş CodeBug yapımıdır · İletişim: hffhakan@gmail.com
+</footer>
+
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+<script src="tables.js"></script>
+<script src="menu-stock.js"></script>
+<script src="qr-quark.js"></script>
+</body>
+</html>
