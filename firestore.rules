@@ -48,6 +48,19 @@ service cloud.firestore {
         allow update: if true; // Onay/Red durumu güncellenir.
         allow delete: if true;
       }
+
+      // ---- Ürün Kategorileri ----
+      match /categories/{categoryId} {
+        allow read: if true; // QR menü kategorilere göre gruplar.
+        allow write: if request.resource.data.keys().hasAll(['name']);
+      }
+
+      // ---- Personel / Yönetici Kullanıcıları (işletme sahibi hariç) ----
+      match /users/{userId} {
+        allow read: if true; // Girişte kullanıcı adı/şifre kontrolü için okunabilir olmalı.
+        allow write: if request.resource.data.keys().hasAll(['username', 'password', 'role']);
+        allow delete: if true;
+      }
     }
   }
 }

@@ -42,4 +42,12 @@ const KafeDB = {
   pendingOrdersCol(businessId) {
     return this.businessDoc(businessId).collection("pendingOrders");
   },
+  // Ürün kategorileri (Stok & QR Menü'de kullanılır).
+  categoriesCol(businessId) {
+    return this.businessDoc(businessId).collection("categories");
+  },
+  // İşletme personel/yönetici kullanıcıları (işletme sahibi hariç).
+  usersCol(businessId) {
+    return this.businessDoc(businessId).collection("users");
+  },
 };

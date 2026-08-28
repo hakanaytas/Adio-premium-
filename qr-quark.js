@@ -1,8 +1,8 @@
 // Hakan Aytaş CodeBug yapımıdır - İletişim: hffhakan@gmail.com
 // qr-quark.js
 // İşletmeye özel dinamik "Quark QR Menü" bağlantısının oluşturulması, müşterilerin
-// okuttuğu QR kod ile açılan canlı (Firestore'dan anlık okunan) herkese açık menü
-// ekranının render edilmesi ve müşterinin ürün + adet + masa seçerek sipariş
+// okuttuğu QR kod ile açılan canlı, kategorilere göre gruplu, fotoğraflı public
+// menü ekranının render edilmesi ve müşterinin ürün + adet + masa seçerek sipariş
 // gönderebilmesi (onay bekleyen sipariş olarak garson/yönetici ekranına düşer).
 
 function buildPublicMenuUrl(businessId) {
@@ -33,35 +33,47 @@ document.getElementById("openQrLinkBtn").addEventListener("click", () => {
 });
 
 // ============ HERKESE AÇIK (PUBLIC) CANLI MENÜ ============
-let PublicMenuState = { businessId: null, products: [], tables: [] };
+let PublicMenuState = { businessId: null, products: [], tables: [], categories: [], activeCategory: "all" };
 let PublicOrderState = { cart: [] };
 
 function loadPublicMenu(businessId) {
   PublicMenuState.businessId = businessId;
 
   KafeDB.businessDoc(businessId).get().then((snap) => {
-    if (snap.exists) {
-      document.getElementById("publicMenuTitle").textContent = snap.data().name || "Kafe Menü";
-    } else {
-      document.getElementById("publicMenuTitle").textContent = "Menü bulunamadı";
-      return;
-    }
+    document.getElementById("publicMenuTitle").textContent = snap.exists ? (snap.data().name || "Kafe Menü") : "Menü bulunamadı";
   });
 
-  // Canlı dinleme: menüde yapılan her değişiklik anında yansır.
-  KafeDB.productsCol(businessId).orderBy("category").onSnapshot((snap) => {
+  KafeDB.productsCol(businessId).onSnapshot((snap) => {
     PublicMenuState.products = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderPublicMenu();
   });
 
-  // Masaların canlı listesi: müşteri sipariş verirken masasını seçebilsin diye.
+  KafeDB.categoriesCol(businessId).orderBy("name").onSnapshot((snap) => {
+    PublicMenuState.categories = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderPublicCategoryTabs();
+    renderPublicMenu();
+  });
+
   KafeDB.tablesCol(businessId).orderBy("name").onSnapshot((snap) => {
     PublicMenuState.tables = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderPublicTableOptions();
   });
 
-  document.getElementById("publicMenuSearch").addEventListener("input", (e) => {
-    renderPublicMenu(e.target.value);
+  document.getElementById("publicMenuSearch").addEventListener("input", () => renderPublicMenu());
+}
+
+function renderPublicCategoryTabs() {
+  const wrap = document.getElementById("publicCategoryTabs");
+  if (!wrap) return;
+  wrap.innerHTML = `<button class="pcat-tab${PublicMenuState.activeCategory === "all" ? " active" : ""}" data-cat="all">Tümü</button>` +
+    PublicMenuState.categories.map((c) => `<button class="pcat-tab${PublicMenuState.activeCategory === c.name ? " active" : ""}" data-cat="${escapeHtml(c.name)}">${escapeHtml(c.name)}</button>`).join("");
+
+  wrap.querySelectorAll(".pcat-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      PublicMenuState.activeCategory = btn.dataset.cat;
+      renderPublicCategoryTabs();
+      renderPublicMenu();
+    });
   });
 }
 
@@ -69,24 +81,24 @@ function renderPublicTableOptions() {
   const sel = document.getElementById("publicTableSelect");
   if (!sel) return;
   const current = sel.value;
-  sel.innerHTML =
-    `<option value="">Masa seçin...</option>` +
+  sel.innerHTML = `<option value="">Masa seçin...</option>` +
     PublicMenuState.tables.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("");
   if (current) sel.value = current;
 }
 
-function renderPublicMenu(filterText) {
+function renderPublicMenu() {
   const list = document.getElementById("publicMenuList");
   if (!list) return;
   list.innerHTML = "";
 
-  const q = (filterText || document.getElementById("publicMenuSearch")?.value || "").trim().toLowerCase();
-  // Tüm ürünler (stok takipsiz olanlar dahil) görünür; sadece gerçekten tükenmiş
-  // stok takipli ürünler "Tükendi" etiketiyle görünür ama sipariş edilemez.
-  const filtered = PublicMenuState.products.filter((p) => p.name.toLowerCase().includes(q));
+  const q = document.getElementById("publicMenuSearch")?.value || "";
+  let filtered = PublicMenuState.products.filter((p) => turkishIncludes(p.name, q) || turkishIncludes(p.category, q));
+  if (PublicMenuState.activeCategory !== "all") {
+    filtered = filtered.filter((p) => (p.category || "Kategorisiz") === PublicMenuState.activeCategory);
+  }
 
   if (filtered.length === 0) {
-    list.innerHTML = `<p class="text-white/80 text-sm text-center col-span-full">Şu anda listelenecek ürün yok.</p>`;
+    list.innerHTML = `<p class="public-empty">Şu anda listelenecek ürün yok.</p>`;
     return;
   }
 
@@ -95,21 +107,21 @@ function renderPublicMenu(filterText) {
     const item = document.createElement("div");
     item.className = "public-menu-item" + (outOfStock ? " sold-out" : "");
     item.innerHTML = `
-      <div class="pcat">${escapeHtml(p.category || "")}</div>
-      <div class="pname">${escapeHtml(p.name)}</div>
-      <div class="pprice">${formatCurrency(p.price)}</div>
-      ${
-        outOfStock
-          ? `<div class="ptag-out">Tükendi</div>`
-          : `<button type="button" class="public-add-btn" data-id="${p.id}">+ Sepete Ekle</button>`
-      }
+      ${p.imageUrl ? `<div class="pimg-wrap"><img src="${escapeHtml(p.imageUrl)}" class="pimg" onerror="this.parentElement.style.display='none'"></div>` : `<div class="pimg-wrap pimg-placeholder">☕</div>`}
+      <div class="pinfo">
+        <div class="pcat">${escapeHtml(p.category || "")}</div>
+        <div class="pname">${escapeHtml(p.name)}</div>
+        ${p.description ? `<div class="pdesc">${escapeHtml(p.description)}</div>` : ""}
+        <div class="pfooter">
+          <span class="pprice">${formatCurrency(p.price)}</span>
+          ${outOfStock ? `<span class="ptag-out">Tükendi</span>` : `<button type="button" class="public-add-btn" data-id="${p.id}">+ Ekle</button>`}
+        </div>
+      </div>
     `;
     list.appendChild(item);
   });
 
-  list.querySelectorAll(".public-add-btn").forEach((btn) => {
-    btn.addEventListener("click", () => addToPublicCart(btn.dataset.id));
-  });
+  list.querySelectorAll(".public-add-btn").forEach((btn) => btn.addEventListener("click", () => addToPublicCart(btn.dataset.id)));
 }
 
 // ============ MÜŞTERİ SEPETİ ============
@@ -117,11 +129,8 @@ function addToPublicCart(productId) {
   const product = PublicMenuState.products.find((p) => p.id === productId);
   if (!product) return;
   const existing = PublicOrderState.cart.find((i) => i.productId === productId);
-  if (existing) {
-    existing.qty += 1;
-  } else {
-    PublicOrderState.cart.push({ productId, name: product.name, price: Number(product.price), qty: 1 });
-  }
+  if (existing) existing.qty += 1;
+  else PublicOrderState.cart.push({ productId, name: product.name, price: Number(product.price), qty: 1 });
   renderPublicCartBar();
   showToast(`${product.name} sepete eklendi.`);
 }
@@ -134,10 +143,7 @@ function renderPublicCartBar() {
   const bar = document.getElementById("publicCartBar");
   if (!bar) return;
   const count = PublicOrderState.cart.reduce((sum, i) => sum + i.qty, 0);
-  if (count === 0) {
-    bar.classList.add("hidden");
-    return;
-  }
+  if (count === 0) { bar.classList.add("hidden"); return; }
   bar.classList.remove("hidden");
   document.getElementById("publicCartCount").textContent = `${count} ürün`;
   document.getElementById("publicCartTotal").textContent = formatCurrency(publicCartTotal());
@@ -198,16 +204,8 @@ document.getElementById("submitPublicOrderBtn").addEventListener("click", async 
   errEl.classList.add("hidden");
 
   const tableId = document.getElementById("publicTableSelect").value;
-  if (!tableId) {
-    errEl.textContent = "Lütfen masanızı seçin.";
-    errEl.classList.remove("hidden");
-    return;
-  }
-  if (PublicOrderState.cart.length === 0) {
-    errEl.textContent = "Sepetiniz boş.";
-    errEl.classList.remove("hidden");
-    return;
-  }
+  if (!tableId) { errEl.textContent = "Lütfen masanızı seçin."; errEl.classList.remove("hidden"); return; }
+  if (PublicOrderState.cart.length === 0) { errEl.textContent = "Sepetiniz boş."; errEl.classList.remove("hidden"); return; }
 
   const table = PublicMenuState.tables.find((t) => t.id === tableId);
   const total = publicCartTotal();
@@ -216,12 +214,8 @@ document.getElementById("submitPublicOrderBtn").addEventListener("click", async 
 
   try {
     await KafeDB.pendingOrdersCol(PublicMenuState.businessId).add({
-      tableId,
-      tableName: table?.name || "",
-      items: PublicOrderState.cart,
-      total,
-      status: "pending",
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      tableId, tableName: table?.name || "", items: PublicOrderState.cart, total,
+      status: "pending", createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
 
     PublicOrderState.cart = [];

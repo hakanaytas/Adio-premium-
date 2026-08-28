@@ -1,38 +1,13 @@
 // Hakan Aytaş CodeBug yapımıdır - İletişim: hffhakan@gmail.com
 // tables.js
-// Masaların listelenmesi, masa açma/kapatma, adisyon (sipariş) ekleme-çıkarma,
-// kaydetme, ödeme alma, adisyon bastırma, garson çağırma ve QR'dan gelen
-// siparişlerin onaylanması işlemleri.
+// Masaların listelenmesi, bölümler, durum yönetimi, arama/sıralama, adisyon
+// (sipariş) ekleme-çıkarma, kaydetme, ödeme alma, adisyon bastırma, garson
+// çağırma ve QR'dan gelen siparişlerin onaylanması işlemleri.
 
 function tsToMillis(ts) {
   if (!ts) return null;
   if (typeof ts.toMillis === "function") return ts.toMillis();
   return ts;
-}
-
-// ============ MASA GRID RENDER ============
-function renderTables() {
-  const grid = document.getElementById("tablesGrid");
-  grid.innerHTML = "";
-
-  if (State.tables.length === 0) {
-    grid.innerHTML = `<p class="text-gray-400 text-sm col-span-full">Henüz masa eklenmedi. "+ Masa Ekle" ile başlayın.</p>`;
-    return;
-  }
-
-  State.tables.forEach((t) => {
-    const isOccupied = t.status === "occupied";
-    const card = document.createElement("div");
-    card.className = "table-card" + (isOccupied ? " occupied" : "") + (t.waiterCall ? " waiter-call" : "");
-    card.innerHTML = `
-      <div class="table-card-name">${escapeHtml(t.name)}</div>
-      <div class="table-card-status">${isOccupied ? "🟢 Dolu" : "⚪ Boş"}</div>
-      ${isOccupied ? `<div class="table-card-time">⏱ ${elapsedSince(tsToMillis(t.openedAt))}</div>` : ""}
-      <div class="table-card-total">${formatCurrency(t.total || 0)}</div>
-    `;
-    card.addEventListener("click", () => openTableModal(t.id));
-    grid.appendChild(card);
-  });
 }
 
 function escapeHtml(str) {
@@ -41,56 +16,163 @@ function escapeHtml(str) {
   return d.innerHTML;
 }
 
+const STATUS_LABEL = { empty: "⚪ Boş", occupied: "🟢 Dolu", reserved: "🟡 Rezerve" };
+
+// ============ MASA GRID RENDER (arama + bölüm filtresi) ============
+function renderTables() {
+  const grid = document.getElementById("tablesGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  const q = document.getElementById("tableSearchInput")?.value || "";
+  const activeSection = document.querySelector(".section-tab.active")?.dataset.section || "all";
+
+  let list = State.tables.filter((t) => turkishIncludes(t.name, q));
+  if (activeSection !== "all") {
+    list = list.filter((t) => (t.section || "Genel") === activeSection);
+  }
+
+  renderSectionTabs();
+
+  if (list.length === 0) {
+    grid.innerHTML = `<p class="text-gray-400 text-sm col-span-full">Masa bulunamadı.</p>`;
+    return;
+  }
+
+  list.forEach((t) => {
+    const status = t.status || "empty";
+    const card = document.createElement("div");
+    card.className = "table-card" + (status === "occupied" ? " occupied" : "") + (status === "reserved" ? " reserved" : "") + (t.waiterCall ? " waiter-call" : "");
+    card.innerHTML = `
+      <button class="table-edit-btn" data-edit="${t.id}" title="Düzenle">✏️</button>
+      <div class="table-card-name">${escapeHtml(t.name)}</div>
+      <div class="table-card-section">${escapeHtml(t.section || "Genel")}</div>
+      <div class="table-card-status">${STATUS_LABEL[status] || STATUS_LABEL.empty}</div>
+      ${status === "occupied" ? `<div class="table-card-time">⏱ ${elapsedSince(tsToMillis(t.openedAt))}</div>` : ""}
+      <div class="table-card-total">${formatCurrency(t.total || 0)}</div>
+    `;
+    card.querySelector(".table-edit-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openEditTableModal(t.id);
+    });
+    card.addEventListener("click", () => openTableModal(t.id));
+    grid.appendChild(card);
+  });
+}
+
+function renderSectionTabs() {
+  const wrap = document.getElementById("tableSectionTabs");
+  if (!wrap) return;
+  const sections = Array.from(new Set(State.tables.map((t) => t.section || "Genel"))).sort();
+  const current = wrap.querySelector(".section-tab.active")?.dataset.section || "all";
+
+  wrap.innerHTML = `<button class="section-tab${current === "all" ? " active" : ""}" data-section="all">Tümü</button>` +
+    sections.map((s) => `<button class="section-tab${current === s ? " active" : ""}" data-section="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join("");
+
+  wrap.querySelectorAll(".section-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      wrap.querySelectorAll(".section-tab").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      renderTables();
+    });
+  });
+}
+
+document.getElementById("tableSearchInput")?.addEventListener("input", () => renderTables());
+
+// ============ MASALARI SIRALA ============
+document.getElementById("sortTablesBtn")?.addEventListener("click", async () => {
+  if (State.tables.length === 0) return;
+  if (!confirm("Tüm masalar bölümlerine göre gruplanıp Masa 1, Masa 2... şeklinde yeniden numaralandırılacak. Devam edilsin mi?")) return;
+
+  const naturalNum = (name) => {
+    const m = (name || "").match(/(\d+)/);
+    return m ? Number(m[1]) : 999999;
+  };
+  const sorted = [...State.tables].sort((a, b) => {
+    const sa = a.section || "Genel", sb = b.section || "Genel";
+    if (sa !== sb) return sa.localeCompare(sb, "tr");
+    return naturalNum(a.name) - naturalNum(b.name) || a.name.localeCompare(b.name, "tr");
+  });
+
+  const batch = db.batch();
+  sorted.forEach((t, idx) => {
+    batch.update(KafeDB.tablesCol(State.businessId).doc(t.id), { name: `Masa ${idx + 1}` });
+  });
+  await batch.commit();
+  showToast("Masalar sıralandı.");
+});
+
 // ============ MASA EKLE (Tekli veya Toplu) ============
-document.getElementById("addTableBtn").addEventListener("click", () => openModal("addTableModal"));
+document.getElementById("addTableBtn").addEventListener("click", () => {
+  const nextNum = State.tables.length + 1;
+  document.getElementById("newTableName").value = "";
+  document.getElementById("newTableName").placeholder = `Masa adı (örn: Masa ${nextNum}) veya toplu için adet girin (örn: 10)`;
+  document.getElementById("newTableSection").value = "";
+  openModal("addTableModal");
+});
 
 document.getElementById("addTableForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const raw = document.getElementById("newTableName").value.trim();
+  const section = document.getElementById("newTableSection").value.trim() || "Genel";
   if (!raw) return;
 
-  // Sadece sayı girildiyse (örn. "10"), o adette masa otomatik oluşturulur.
   const isBulkCount = /^\d+$/.test(raw) && Number(raw) > 0;
 
   if (isBulkCount) {
-    const count = Math.min(Number(raw), 200); // güvenlik sınırı
+    const count = Math.min(Number(raw), 200);
     const existingNumbers = State.tables
-      .map((t) => {
-        const m = (t.name || "").match(/^Masa (\d+)$/);
-        return m ? Number(m[1]) : null;
-      })
+      .map((t) => { const m = (t.name || "").match(/^Masa (\d+)$/); return m ? Number(m[1]) : null; })
       .filter((n) => n !== null);
     const startFrom = existingNumbers.length ? Math.max(...existingNumbers) + 1 : 1;
 
     const batch = db.batch();
     for (let i = 0; i < count; i++) {
-      const num = startFrom + i;
       const ref = KafeDB.tablesCol(State.businessId).doc();
-      batch.set(ref, {
-        name: `Masa ${num}`,
-        status: "empty",
-        openedAt: null,
-        cart: [],
-        total: 0,
-        waiterCall: false,
-      });
+      batch.set(ref, { name: `Masa ${startFrom + i}`, section, status: "empty", openedAt: null, cart: [], total: 0, waiterCall: false });
     }
     await batch.commit();
     showToast(`${count} masa otomatik oluşturuldu.`);
   } else {
-    await KafeDB.tablesCol(State.businessId).add({
-      name: raw,
-      status: "empty",
-      openedAt: null,
-      cart: [],
-      total: 0,
-      waiterCall: false,
-    });
+    await KafeDB.tablesCol(State.businessId).add({ name: raw, section, status: "empty", openedAt: null, cart: [], total: 0, waiterCall: false });
     showToast("Masa eklendi.");
   }
 
-  document.getElementById("newTableName").value = "";
   closeModal("addTableModal");
+});
+
+// ============ MASA DÜZENLE / SİL ============
+function openEditTableModal(tableId) {
+  const t = State.tables.find((x) => x.id === tableId);
+  if (!t) return;
+  document.getElementById("editTableId").value = t.id;
+  document.getElementById("editTableName").value = t.name;
+  document.getElementById("editTableSection").value = t.section || "";
+  document.getElementById("editTableStatus").value = t.status || "empty";
+  openModal("editTableModal");
+}
+
+document.getElementById("editTableForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = document.getElementById("editTableId").value;
+  const name = document.getElementById("editTableName").value.trim();
+  const section = document.getElementById("editTableSection").value.trim() || "Genel";
+  const status = document.getElementById("editTableStatus").value;
+  if (!id || !name) return;
+
+  await KafeDB.tablesCol(State.businessId).doc(id).update({ name, section, status });
+  closeModal("editTableModal");
+  showToast("Masa güncellendi.");
+});
+
+document.getElementById("deleteTableBtn").addEventListener("click", async () => {
+  const id = document.getElementById("editTableId").value;
+  if (!id) return;
+  if (!confirm("Bu masayı silmek istediğinize emin misiniz?")) return;
+  await KafeDB.tablesCol(State.businessId).doc(id).delete();
+  closeModal("editTableModal");
+  showToast("Masa silindi.");
 });
 
 // ============ MASA / ADİSYON MODALI ============
@@ -116,8 +198,6 @@ function syncOpenTableModal() {
     closeModal("tableModal");
     return;
   }
-  // Başka bir cihazdan gelen canlı güncellemeleri modalın açık kalan
-  // sepetini bozmadan sadece toplamı/adisyon listesini tazeler.
   renderOrderItems();
 }
 
@@ -166,14 +246,16 @@ function renderOrderItems() {
   document.getElementById("orderTotalLabel").textContent = formatCurrency(currentCartTotal());
 }
 
-// ============ HIZLI ÜRÜN EKLEME GRID ============
+// ============ HIZLI ÜRÜN EKLEME GRID (ad, kategori, fiyat üzerinden arama) ============
 function renderQuickAddGrid(filterText) {
   const grid = document.getElementById("quickAddGrid");
   if (!grid) return;
   grid.innerHTML = "";
 
-  const q = (filterText || document.getElementById("orderSearchInput")?.value || "").trim().toLowerCase();
-  const filtered = State.products.filter((p) => p.name.toLowerCase().includes(q));
+  const q = (filterText ?? document.getElementById("orderSearchInput")?.value ?? "").trim();
+  const filtered = State.products.filter((p) =>
+    turkishIncludes(p.name, q) || turkishIncludes(p.category, q) || String(p.price).includes(q)
+  );
 
   if (filtered.length === 0) {
     grid.innerHTML = `<p class="text-gray-400 text-sm col-span-full">Ürün bulunamadı.</p>`;
@@ -181,24 +263,20 @@ function renderQuickAddGrid(filterText) {
   }
 
   filtered.forEach((p) => {
-    // Stok takipsiz ürünlerde (örn. çay) stok 0 olsa bile sipariş engeli olmaz.
     const outOfStock = p.trackStock !== false && Number(p.stock) <= 0;
     const card = document.createElement("div");
     card.className = "quick-add-card" + (outOfStock ? " out-of-stock" : "");
     card.innerHTML = `
       <div class="qname">${escapeHtml(p.name)}</div>
+      <div class="qcat">${escapeHtml(p.category || "")}</div>
       <div class="qprice">${formatCurrency(p.price)}</div>
     `;
-    if (!outOfStock) {
-      card.addEventListener("click", () => addProductToCart(p));
-    }
+    if (!outOfStock) card.addEventListener("click", () => addProductToCart(p));
     grid.appendChild(card);
   });
 }
 
-document.getElementById("orderSearchInput").addEventListener("input", (e) => {
-  renderQuickAddGrid(e.target.value);
-});
+document.getElementById("orderSearchInput").addEventListener("input", (e) => renderQuickAddGrid(e.target.value));
 
 function addProductToCart(product) {
   const existing = State.cart.find((i) => i.productId === product.id);
@@ -239,8 +317,6 @@ function clearWaiterCall(tableId) {
   return KafeDB.tablesCol(State.businessId).doc(tableId).update({ waiterCall: false });
 }
 
-// Modal açıkken garson çağrısı otomatik temizlenmesin diye ayrı buton yok;
-// masa kartındaki bildirime tıklanıp modal açıldığında çağrı otomatik kapatılır.
 const _origOpenTableModal = openTableModal;
 openTableModal = function (tableId) {
   _origOpenTableModal(tableId);
@@ -293,7 +369,6 @@ document.querySelectorAll(".payment-method-btn").forEach((btn) => {
     const table = State.tables.find((t) => t.id === State.openTableId);
     const total = currentCartTotal();
 
-    // Stok düşümü (sadece stok takibi açık olan ürünlerde yapılır)
     for (const item of State.cart) {
       const product = State.products.find((p) => p.id === item.productId);
       if (product && product.trackStock !== false) {
@@ -302,7 +377,6 @@ document.querySelectorAll(".payment-method-btn").forEach((btn) => {
       }
     }
 
-    // Kapanan adisyonu geçmişe (gün sonu raporu için) kaydet
     await KafeDB.ordersCol(State.businessId).add({
       tableId: State.openTableId,
       tableName: table?.name || "",
@@ -312,13 +386,8 @@ document.querySelectorAll(".payment-method-btn").forEach((btn) => {
       closedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Masayı boşalt
     await KafeDB.tablesCol(State.businessId).doc(State.openTableId).update({
-      cart: [],
-      total: 0,
-      status: "empty",
-      openedAt: null,
-      waiterCall: false,
+      cart: [], total: 0, status: "empty", openedAt: null, waiterCall: false,
     });
 
     closeModal("paymentModal");
@@ -356,15 +425,10 @@ function renderPendingOrdersList() {
     list.appendChild(box);
   });
 
-  list.querySelectorAll("[data-approve]").forEach((btn) => {
-    btn.addEventListener("click", () => approvePendingOrder(btn.dataset.approve));
-  });
-  list.querySelectorAll("[data-reject]").forEach((btn) => {
-    btn.addEventListener("click", () => rejectPendingOrder(btn.dataset.reject));
-  });
+  list.querySelectorAll("[data-approve]").forEach((btn) => btn.addEventListener("click", () => approvePendingOrder(btn.dataset.approve)));
+  list.querySelectorAll("[data-reject]").forEach((btn) => btn.addEventListener("click", () => rejectPendingOrder(btn.dataset.reject)));
 }
 
-// Onaylanan sipariş otomatik olarak ilgili masanın adisyonuna eklenir.
 async function approvePendingOrder(orderId) {
   const order = State.pendingOrders.find((o) => o.id === orderId);
   if (!order) return;
@@ -379,18 +443,13 @@ async function approvePendingOrder(orderId) {
   const newCart = JSON.parse(JSON.stringify(table.cart || []));
   (order.items || []).forEach((item) => {
     const existing = newCart.find((i) => i.productId === item.productId);
-    if (existing) {
-      existing.qty += item.qty;
-    } else {
-      newCart.push({ productId: item.productId, name: item.name, price: item.price, qty: item.qty });
-    }
+    if (existing) existing.qty += item.qty;
+    else newCart.push({ productId: item.productId, name: item.name, price: item.price, qty: item.qty });
   });
   const newTotal = newCart.reduce((sum, i) => sum + i.price * i.qty, 0);
 
   await KafeDB.tablesCol(State.businessId).doc(order.tableId).update({
-    cart: newCart,
-    total: newTotal,
-    status: "occupied",
+    cart: newCart, total: newTotal, status: "occupied",
     openedAt: table.openedAt || firebase.firestore.FieldValue.serverTimestamp(),
   });
   await KafeDB.pendingOrdersCol(State.businessId).doc(orderId).update({ status: "approved" });
